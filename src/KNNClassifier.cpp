@@ -78,6 +78,7 @@ int KNNClassifier::classify(const float input[], int k)
     nearestNeighbors[i].distance = FLT_MAX;
     nearestNeighbors[i].class_ = INT_MIN;
   }
+  float greaterDistance = FLT_MAX;
 
   // find the K nearest neighbours
   KNNNode* node = _examples;
@@ -85,18 +86,22 @@ int KNNClassifier::classify(const float input[], int k)
   while (node != NULL) {
     float distance = node->distance(input, _inputLength);
 
-    for (int i = 0; i < k; i++) {
-      if (distance < nearestNeighbors[i].distance) {
-        // shift current k's by one
-        for (int j = k - 1; j > i; j--) {
-          nearestNeighbors[j] = nearestNeighbors[j - 1];
+    if(distance < greaterDistance){
+      for (int i = 0; i < k; i++) {
+        if (distance < nearestNeighbors[i].distance) {
+          // shift current k's by one
+          for (int j = k - 1; j > i; j--) {
+            nearestNeighbors[j] = nearestNeighbors[j - 1];
+          }
+
+          greaterDistance = nearestNeighbors[k - 1].distance;
+
+          // insert new k
+          nearestNeighbors[i].distance = distance;
+          nearestNeighbors[i].class_ = node->class_();
+
+          break;
         }
-
-        // insert new k
-        nearestNeighbors[i].distance = distance;
-        nearestNeighbors[i].class_ = node->class_();
-
-        break;
       }
     }
 
@@ -160,6 +165,115 @@ int KNNClassifier::classify(const float input[], int k)
 
   return class_;
 }
+
+int KNNClassifier::classifyWeighted(const float input[], int k, float w)
+{
+  if (k == 0 || k > getCount()) {
+    _confidence = NAN;
+
+    return 0;
+  }
+
+  struct {
+    float distance;
+    int class_;
+  } nearestNeighbors[k];
+
+  // default values
+  for (int i = 0; i < k; i++) {
+    nearestNeighbors[i].distance = FLT_MAX;
+    nearestNeighbors[i].class_ = INT_MIN;
+  }
+  float greaterDistance = FLT_MAX;
+
+  // find the K nearest neighbours
+  KNNNode* node = _examples;
+
+  while (node != NULL) {
+    float distance = node->distance(input, _inputLength);
+
+    if(distance < greaterDistance){
+      for (int i = 0; i < k; i++) {
+        if (distance < nearestNeighbors[i].distance) {
+          // shift current k's by one
+          for (int j = k - 1; j > i; j--) {
+            nearestNeighbors[j] = nearestNeighbors[j - 1];
+          }
+
+          greaterDistance = nearestNeighbors[k - 1].distance;
+
+          // insert new k
+          nearestNeighbors[i].distance = distance;
+          nearestNeighbors[i].class_ = node->class_();
+
+          break;
+        }
+      }
+    }
+
+    node = node->next();
+  }
+
+  // count the class numbers
+  struct {
+    int class_;
+    float weight;
+  } classWeights[k];
+
+  // default values
+  for (int i = 0; i < k; i++) {
+    classWeights[i].weight = 0;
+    classWeights[i].class_ = 0;
+  }
+
+  for (int i = 0; i < k; i++) {
+    int class_ = nearestNeighbors[i].class_;
+    float weight = w / (sqrt(nearestNeighbors[i].distance) + 0.0001); // add a small value to avoid division by zero
+    bool classFound = false;
+
+    // try to find an existing slot
+    for (int j = 0; j < k; j++) {
+      if (classWeights[j].class_ == class_) {
+        classWeights[j].weight += weight;
+        classFound = true;
+        break;
+      }
+    }
+
+    if (classFound) {
+      // done this nearest neighbor
+      continue;
+    }
+
+    // insert class in the first free slot
+    for (int j = 0; j < k; j++) {
+      if (classWeights[j].weight == 0) {
+        classWeights[j].weight = weight;
+        classWeights[j].class_ = class_;
+        break;
+      }
+    }
+  }
+
+  float maxWeight = -1;
+  int class_ = 0;
+  float totalWeight = 0;
+
+  for (int i = 0; i < k; i++) {    
+    float classWeight = classWeights[i].weight;
+    totalWeight += classWeight;
+
+    if(maxWeight < classWeight) {
+      maxWeight = classWeight;
+      class_ = classWeights[i].class_;
+    }
+  }
+
+  _confidence = (float)maxWeight / (float)totalWeight;
+
+  return class_;
+}
+
 
 float KNNClassifier::confidence()
 {
