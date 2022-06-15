@@ -51,7 +51,7 @@ float KNNNode::distance(const float values[], int numValues) const
     f += (delta * delta);
   }
 
-  return sqrtf(f);
+  return f; // sqrt(f) is not needed and save time
 }
 
 int KNNNode::class_() const
