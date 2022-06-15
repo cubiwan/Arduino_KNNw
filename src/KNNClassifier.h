@@ -31,6 +31,7 @@ public:
 
   void addExample(const float input[], int class_);
   int classify(const float input[], int k = 3);
+  int classifyWeighted(const float input[], int k, float w = 1.0);
 
   float confidence();
 
